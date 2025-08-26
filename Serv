@@ -1,0 +1,46 @@
+
+-- Hello to the one who is going to do the test already I want to thank this person that god bless him,
+--Speaking of my game I created a homing missile system that uses as request physics, cframe, and metatble with 
+--raycast etc, this system will make sure to fire a missile that will then follow the player in question, the player 
+--has a parry by pressing F which will allow him to send the missile back to another person (player) not npc. We first
+--have a GameManager which will allow to manage all the loop core, and then we have the Missile and parade modules, Missile 
+--will manage all the functions that the missile uses of course with setmetatble, and then parad which will manage to 
+--create the init function to connect the event and then listen, here is a little debrief and I hope that it will be enough 
+--(estimated time 5 hours of work) without copy paste or cheating or ia etc,(just me and my brain) I hope you enjoy this system !
+-- and run 2 players and test it, I haven't adjusted for NPCs yet
+
+
+
+
+local GameManager = require(game.ReplicatedStorage.Module.GameManager)
+local Players = game:GetService("Players")
+local ParaModule = require(game.ReplicatedStorage.Module.ParadeManager)
+
+local LAUNCH_POINT = workspace.StartPoin 
+local DETECTION_RADIUS = 30
+local COOLDOWN = 5 
+local playerCooldowns = {}
+
+ParaModule:Init()
+while true do
+	task.wait(0.5) 
+
+	for _, player in pairs(Players:GetPlayers()) do
+		if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+
+			local distance = (player.Character.HumanoidRootPart.Position - LAUNCH_POINT.Position).Magnitude
+
+			if distance < DETECTION_RADIUS then
+				
+				if not playerCooldowns[player] or os.clock() - playerCooldowns[player] > COOLDOWN then
+					playerCooldowns[player] = os.clock() 
+					GameManager.LaunchMissile(player, LAUNCH_POINT,true)
+				end
+			end
+		end
+	end
+end
+
+
+
+
