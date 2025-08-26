@@ -1,0 +1,41 @@
+local ParadeManager = {}
+
+local remoteEvent = game.ReplicatedStorage.RemotesEvent:FindFirstChild("Parade")
+local GameManager = require(game.ReplicatedStorage.Module.GameManager)
+function ParadeManager:Init()
+	remoteEvent.OnServerEvent:Connect(function(player)
+	
+	local newattaq  = nil
+		for _,value in pairs(game.Players:GetPlayers()) do
+			if value ~= player then
+				newattaq = value
+			end
+		end
+	if newattaq then
+	
+		local Allmisive = GameManager:Getmissile()
+		print(Allmisive)
+		for i, missile in pairs(Allmisive) do
+			if missile.Cible.Name == player.Name  then
+				print("s")
+				local distance = (missile.Part.Position - player.Character.HumanoidRootPart.Position).Magnitude
+				if distance < 10 then
+					print("ss")
+					missile.Cible = newattaq
+	
+				end
+			end
+		end
+	end
+
+	end)
+end
+
+function ParadeManager:Parade()
+	
+	
+	
+end
+
+
+return ParadeManager
