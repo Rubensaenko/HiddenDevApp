@@ -1,0 +1,10 @@
+local remotFolder = game.ReplicatedStorage.RemotesEvent
+local uis  = game:GetService("UserInputService")
+local player = game.Players.LocalPlayer
+
+uis.InputBegan:Connect(function(key)
+	if key.KeyCode == Enum.KeyCode.F then
+
+		remotFolder.Parade:FireServer()
+	end
+end)
