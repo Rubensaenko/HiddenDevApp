@@ -1,0 +1,129 @@
+
+local Missile = {}
+Missile.__index = Missile
+
+local RunService = game:GetService("RunService")
+
+
+function Missile.new(cible, pointDeLancement)
+	local self = setmetatable({}, Missile)
+
+	self.Cible = cible
+	self.Vitesse = 1
+	self.TurnSpeed = 0.2 
+	self.Timeout = 10 
+
+	local part = Instance.new("Part")
+	part.Name = "Missile"
+	part.Parent = workspace
+	part.Position = pointDeLancement.Position
+	part.CFrame = CFrame.lookAt(part.Position, cible.Character:FindFirstChild("HumanoidRootPart").Position)
+	part.Anchored = true
+	part.CanCollide = false
+	part.Size = Vector3.new(1, 1, 3) -- s
+	part.BrickColor = BrickColor.new("Bright red")
+	part.Material = Enum.Material.Neon
+	
+	local trail = Instance.new("Trail")
+	trail.Parent = part
+	trail.Enabled = true
+	trail.Color = ColorSequence.new(Color3.new(1, 0, 0))
+	trail.Attachment0 = Instance.new("Attachment", part)
+	trail.Attachment1 = Instance.new("Attachment", part)
+	trail.Lifetime = 0.1
+	trail.MinLength = 0.1
+	trail.FaceCamera = true
+	trail.LightEmission = 1
+	trail.LightInfluence = 0
+	trail.WidthScale = NumberSequence.new(1, 0)
+	trail.Transparency = NumberSequence.new(0, 1)
+
+	
+
+	self.Part = part
+	self.StartTime = os.clock()
+	self.Connection = nil -- 
+	self.CooldwonDamage = false
+
+		
+	return self
+end
+
+-- La fonction de mise à jour, appelée à chaque frame
+function Missile:Update(dt)
+	-- Sécurité : si la cible n'existe plus ou est morte, on s'arrête
+	if not self.Cible or not self.Cible.Parent or self.Cible.Character:FindFirstChild("Humanoid").Health   <= 0 then
+		self:Destroy()
+		return
+	end
+
+	
+	if os.clock() - self.StartTime > self.Timeout then
+		self:Destroy()
+		return
+	end
+
+	local hrp = self.Cible.Character:FindFirstChild("HumanoidRootPart") or self.Cible:FindFirstChild("HumanoidRootPart")
+	if not hrp then self:Destroy() return end
+
+local goalOrientation = CFrame.lookAt(self.Part.Position, hrp.Position)
+	self.Part.CFrame = self.Part.CFrame:Lerp(goalOrientation, self.TurnSpeed)
+
+	
+	
+	
+	local mouvement = self.Part.CFrame.LookVector * self.Vitesse * (dt * 60) 
+	self.Part.CFrame = self.Part.CFrame + mouvement
+	
+	local raycast = workspace:Raycast(self.Part.Position,self.Part.CFrame.LookVector * 20)
+	
+	if raycast then
+		local hum = raycast.Instance.Parent:FindFirstChild("Humanoid")
+		if hum and 	self.CooldwonDamage == false then
+			self.CooldwonDamage = true
+			hum:TakeDamage(10) -- Normaly the missil one shot/and destroy immediatly but for the test i create that for you ! 
+			wait(1)
+			self.CooldwonDamage = false
+		end
+	end
+end
+
+
+function Missile:Explode()
+	local expl = Instance.new("Explosion")
+	expl.Parent = workspace
+	expl.Position = self.Part.Position
+	expl.BlastRadius = 10
+	expl.BlastPressure = 100000
+
+	self:Destroy()
+end
+
+
+function Missile:Destroy()
+	if self.Connection then
+		self.Connection:Disconnect() 
+		self.Connection = nil
+	end
+	if self.Part then
+		self.Part:Destroy()
+		self.Part = nil
+	end
+end
+
+
+local MissileV2 = {}
+MissileV2.__index = MissileV2
+
+setmetatable(MissileV2,Missile)
+
+function MissileV2.new(cible, pointDeLancement)
+	local self = setmetatable(Missile.new(cible, pointDeLancement), MissileV2)
+	
+	self.Part.Size = Vector3.new(4, 4, 3) 
+	self.Vitesse = 0.5
+	return self
+end
+
+
+return {Missile = Missile,MissileV2 = MissileV2}
