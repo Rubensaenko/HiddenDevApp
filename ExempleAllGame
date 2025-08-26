@@ -1,0 +1,255 @@
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local MissileSystem = {}
+
+--==============================================================================
+-- PARTIE 1 : CONFIGURATION CENTRALE
+--==============================================================================
+local Config = {
+	MissileRapide = {
+		Vitesse = 250,
+		TurnSpeed = 0.1,
+		Taille = Vector3.new(0.8, 0.8, 3),
+		Couleur = BrickColor.new("Bright yellow"),
+		RayonExplosion = 8,
+		PressionExplosion = 50000,
+	},
+	MissileLourd = {
+		Vitesse = 150,
+		TurnSpeed = 0.05,
+		Taille = Vector3.new(2, 2, 6),
+		Couleur = BrickColor.new("Deep blue"),
+		RayonExplosion = 15,
+		PressionExplosion = 200000,
+	}
+}
+
+--==============================================================================
+-- PARTIE 2 : VARIABLES PRIVÉES ET ÉVÉNEMENTS
+--==============================================================================
+local activeMissiles = {}
+local paradeEvent = Instance.new("RemoteEvent", ReplicatedStorage)
+paradeEvent.Name = "ParadeAttemptEvent"
+
+--==============================================================================
+-- PARTIE 3 : LA CLASSE MISSILE DE BASE (Parent)
+--==============================================================================
+local MissileDeBase = {}
+MissileDeBase.__index = MissileDeBase
+
+function MissileDeBase.new(cible, pointDeLancement, attaquant, missileType)
+	local self = setmetatable({}, MissileDeBase)
+	
+	self.Type = missileType
+	self.Config = Config[missileType]
+	if not self.Config then
+		warn("Type de missile invalide : " .. tostring(missileType))
+		return nil
+	end
+
+	self.Cible = cible
+	self.Attaquant = attaquant
+	self.Timeout = 12
+	
+	local part = Instance.new("Part")
+	part.Name = self.Type
+	part.Parent = workspace
+	part.Position = pointDeLancement.Position
+	part.Anchored = true
+	part.CanCollide = false
+	part.Size = self.Config.Taille
+	part.BrickColor = self.Config.Couleur
+	part.Material = Enum.Material.Neon
+	
+	local trail = Instance.new("Trail", part)
+	trail.Lifetime = 0.25
+	
+	self.Part = part
+	self.StartTime = os.clock()
+	
+	return self
+end
+
+function MissileDeBase:Update(dt)
+	if not self.Cible or not self.Cible.Parent or not self.Cible.Character or not self.Cible.Character:FindFirstChild("Humanoid") or self.Cible.Character.Humanoid.Health <= 0 then
+		self:Destroy()
+		return
+	end
+	
+	if os.clock() - self.StartTime > self.Timeout then
+		self:Destroy()
+		return
+	end
+
+	local hrp = self.Cible.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then
+		self:Destroy()
+		return
+	end
+	
+	local goalOrientation = CFrame.lookAt(self.Part.Position, hrp.Position)
+	self.Part.CFrame = self.Part.CFrame:Lerp(goalOrientation, self.Config.TurnSpeed)
+	
+	local frameSpeed = self.Config.Vitesse * dt
+	local travelVector = self.Part.CFrame.LookVector * frameSpeed
+	
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterDescendantsInstances = {self.Part, self.Attaquant.Character}
+	raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+	
+	local raycastResult = workspace:Raycast(self.Part.Position, travelVector, raycastParams)
+	
+	if raycastResult and raycastResult.Instance.Parent == self.Cible.Character then
+		self:Explode()
+	else
+		self.Part.CFrame = self.Part.CFrame + travelVector
+	end
+end
+
+function MissileDeBase:Explode()
+	if not self.Part then return end
+	
+	local expl = Instance.new("Explosion")
+	expl.Parent = workspace
+	expl.Position = self.Part.Position
+	expl.BlastRadius = self.Config.RayonExplosion
+	expl.BlastPressure = self.Config.PressionExplosion
+	
+	self:Destroy()
+end
+
+function MissileDeBase:Destroy()
+	if self.Part then
+		self.Part:Destroy()
+		self.Part = nil
+	end
+end
+
+--==============================================================================
+-- PARTIE 4 : LES CLASSES DE MISSILES SPÉCIFIQUES (Enfants)
+--==============================================================================
+local MissileRapide = setmetatable({}, MissileDeBase)
+MissileRapide.__index = MissileRapide
+function MissileRapide.new(cible, pointDeLancement, attaquant)
+	local self = MissileDeBase.new(cible, pointDeLancement, attaquant, "MissileRapide")
+	setmetatable(self, MissileRapide)
+	return self
+end
+
+local MissileLourd = setmetatable({}, MissileDeBase)
+MissileLourd.__index = MissileLourd
+function MissileLourd.new(cible, pointDeLancement, attaquant)
+	local self = MissileDeBase.new(cible, pointDeLancement, attaquant, "MissileLourd")
+	setmetatable(self, MissileLourd)
+	return self
+end
+
+
+--==============================================================================
+-- PARTIE 5 : INTERFACE PUBLIQUE ET MOTEUR PRINCIPAL
+--==============================================================================
+function MissileSystem.Launch(missileType, cible, pointDeLancement, attaquant)
+	local missileClass = nil
+	if missileType == "Rapide" then
+		missileClass = MissileRapide
+	elseif missileType == "Lourd" then
+		missileClass = MissileLourd
+	end
+	
+	if missileClass then
+		local newMissile = missileClass.new(cible, pointDeLancement, attaquant)
+		table.insert(activeMissiles, newMissile)
+		return newMissile
+	end
+	return nil
+end
+
+function MissileSystem.AttemptParry(player)
+	local DISTANCE_DE_PARADE = 12
+	
+	for _, missile in ipairs(activeMissiles) do
+		if missile.Cible == player then
+			local hrp = player.Character and player.Character.HumanoidRootPart
+			if not hrp then continue end
+			
+			local distance = (missile.Part.Position - hrp.Position).Magnitude
+			
+			if distance <= DISTANCE_DE_PARADE then
+				if missile.Attaquant and missile.Attaquant.Parent then
+					missile.Cible = missile.Attaquant
+					missile.Attaquant = player
+					
+					local sound = Instance.new("Sound", missile.Part)
+					sound.SoundId = "rbxassetid://130632152" -- Son de parade
+					sound:Play()
+					
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+function MissileSystem.Start()
+	RunService.Heartbeat:Connect(function(dt)
+		for i = #activeMissiles, 1, -1 do
+			local missile = activeMissiles[i]
+			if missile and missile.Part then
+				missile:Update(dt)
+			else
+				table.remove(activeMissiles, i)
+			end
+		end
+	end)
+	
+	paradeEvent.OnServerEvent:Connect(MissileSystem.AttemptParry)
+	
+	local LAUNCH_POINT = workspace:WaitForChild("StartPoint")
+	local DETECTION_RADIUS = 50
+	local COOLDOWN = 5
+	local playerCooldowns = {}
+
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			local allPlayers = Players:GetPlayers()
+			if #allPlayers < 2 then continue end
+			
+			for _, player in ipairs(allPlayers) do
+				local character = player.Character
+				local hrp = character and character:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					if (hrp.Position - LAUNCH_POINT.Position).Magnitude < DETECTION_RADIUS then
+						local lastLaunch = playerCooldowns[player]
+						if not lastLaunch or os.clock() - lastLaunch > COOLDOWN then
+							playerCooldowns[player] = os.clock()
+							
+							local target = nil
+							for _, otherPlayer in ipairs(allPlayers) do
+								if otherPlayer ~= player then target = otherPlayer; break end
+							end
+							
+							if target then
+								local missileTypeToLaunch = math.random(1, 2) == 1 and "Rapide" or "Lourd"
+								MissileSystem.Launch(missileTypeToLaunch, target, LAUNCH_POINT, player)
+							end
+						end
+					end
+				end
+			end
+		end
+	end)
+	
+	Players.PlayerAdded:Connect(function(player)
+		player.CharacterAdded:Connect(function(character)
+			local localScript = script.ParadeLocalScript:Clone()
+			localScript.Parent = player.PlayerGui
+		end)
+	end)
+end
+
+return MissileSystem
